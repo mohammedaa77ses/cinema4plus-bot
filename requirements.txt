@@ -1,0 +1,6 @@
+python-telegram-bot
+requests
+supabase
+groq
+gemini
+ffmpeg-python
