@@ -92,8 +92,9 @@ def list_movies():
 
 # --- تشغيل البوت + السيرفر مع بعض ---
 def run_bot():
-    bot.polling()
+    bot.polling(none_stop=True, timeout=60)
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot).start()
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+    port = int(os.environ.get("PORT", 10000))  # Render يرسل البورت هنا
+    uvicorn.run(app, host="0.0.0.0", port=port)
