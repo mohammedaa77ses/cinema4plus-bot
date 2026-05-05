@@ -8,8 +8,12 @@ import telebot
 from groq import Groq
 import google.generativeai as genai
 import time
+import logging
 
-# --- سحب المفاتيح من Render ---
+# تفعيل سجلات الأخطاء لتظهر في Render Logs
+logging.basicConfig(level=logging.INFO)
+
+# --- سحب المفاتيح ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -20,71 +24,46 @@ GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 bot = telebot.TeleBot(TOKEN)
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 client_groq = Groq(api_key=GROQ_KEY)
-
 genai.configure(api_key=GEMINI_KEY)
 gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
-ADMIN_ID = 1071477484 
+ADMIN_ID = "1071477484" 
 
-# --- واجهة FastAPI ---
 app = FastAPI()
 
 @app.get("/")
 def home():
     return {"status": "Cinema For Yemen is Online!"}
 
-# --- أوامر تيليجرام (مع تحسين الرد) ---
-
 @bot.message_handler(commands=["start"])
 def welcome(message):
-    # شلنا شرط الآي دي مؤقتاً للتجربة، لو اشتغل رجعه
-    bot.reply_to(message, "🚀 أهلاً بك! البوت شغال ومربوط بـ Render بنجاح.")
-
-@bot.message_handler(commands=["add"])
-def add_movie(message):
-    if str(message.chat.id) == str(ADMIN_ID):
-        try:
-            movie_name = message.text.split(maxsplit=1)[1]
-            db.table("movies").insert({"name": movie_name}).execute()
-            bot.reply_to(message, f"🎬 تم إضافة: {movie_name}")
-        except:
-            bot.reply_to(message, "⚠️ أرسل اسم الفيلم بعد الأمر.")
+    bot.reply_to(message, "🚀 أهلاً بك! البوت شغال الآن على Render.")
 
 @bot.message_handler(func=lambda message: True)
 def ai_logic(message):
-    if str(message.chat.id) == str(ADMIN_ID):
+    if str(message.chat.id) == ADMIN_ID:
         try:
-            # محاولة Gemini
             response = gemini_model.generate_content(message.text)
             bot.reply_to(message, response.text)
-        except:
-            try:
-                # محاولة Groq البديلة
-                chat = client_groq.chat.completions.create(
-                    messages=[{"role": "user", "content": message.text}],
-                    model="mixtral-8x7b-32768",
-                )
-                bot.reply_to(message, chat.choices[0].message.content)
-            except:
-                bot.reply_to(message, "⚙️ السيرفرات مضغوطة حالياً.")
+        except Exception as e:
+            logging.error(f"AI Error: {e}")
+            bot.reply_to(message, "🛠 عذراً، المحرك مشغول حالياً.")
 
-# --- دالة تشغيل البوت مع إعادة المحاولة الذكية ---
 def run_bot():
     while True:
         try:
-            print("🤖 Starting Telegram Bot...")
-            bot.remove_webhook() # تنظيف أي تعليق سابق
-            bot.infinity_polling(timeout=20, long_polling_timeout=10)
+            logging.info("🤖 Starting Telegram Bot Polling...")
+            bot.remove_webhook()
+            bot.infinity_polling(timeout=60, long_polling_timeout=30)
         except Exception as e:
-            print(f"❌ Bot crashed: {e}. Restarting in 5 seconds...")
-            time.sleep(5)
+            logging.error(f"Bot Crashed: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
-    # تشغيل البوت في Thread منفصل
+    # تشغيل البوت في الخلفية
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # تشغيل السيرفر الرئيسي
+    # تشغيل السيرفر
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
