@@ -3,37 +3,43 @@ import subprocess
 import telebot
 from supabase import create_client
 from groq import Groq
+import google.generativeai as genai
 
-# سحب المفاتيح الأساسية
+# --- سحب المفاتيح من Render ---
 TOKEN = os.environ.get('TELEGRAM_TOKEN')
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 GROQ_KEY = os.environ.get('GROQ_API_KEY')
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY')
 
-# مفاتيح المواقع الأخرى (اختياري - ضفها في ريندر لو احتجت)
-CLOUDFLARE_API = os.environ.get('CLOUDFLARE_API')
-HF_TOKEN = os.environ.get('HF_TOKEN') # Hugging Face
-
-ADMIN_ID = 1071477484  # تأكد إنه الأي دي حقك
-
+# --- إعداد المحركات ---
 bot = telebot.TeleBot(TOKEN)
 db = create_client(SUPABASE_URL, SUPABASE_KEY)
 client_groq = Groq(api_key=GROQ_KEY)
+
+# إعداد ذكاء Gemini
+genai.configure(api_key=GEMINI_KEY)
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+
+ADMIN_ID = 1071477484  # الأي دي الخاص بك (محمد الريمي)
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
     if message.chat.id == ADMIN_ID:
         menu = (
             "🚀 **مرحباً بالقائد محمد الريمي**\n\n"
-            "لوحة السيطرة جاهزة:\n"
-            "🔹 `/install [اسم]` : لتثبيت مكتبات بايثون.\n"
-            "🔹 `/exec [أمر]` : لتنفيذ أوامر Linux مباشرة (Bash).\n"
-            "🔹 `/db` : لفحص مخزن سوباباس.\n"
-            "🔹 أو أرسل أي سؤال وسيجيبك الذكاء الاصطناعي."
+            "لوحة السيطرة متصلة بـ:\n"
+            "🤖 **Gemini 1.5 Pro**\n"
+            "⚡ **Groq (Mixtral)**\n"
+            "📦 **Supabase Database**\n\n"
+            "الأوامر المتاحة:\n"
+            "🔹 `/install [اسم]` : لتثبيت مكتبات.\n"
+            "🔹 `/exec [أمر]` : لتنفيذ أوامر Linux.\n"
+            "🔹 أرسل أي سؤال وسيجيبك Gemini فوراً."
         )
         bot.reply_to(message, menu, parse_mode='Markdown')
 
-# 1. ميزة تثبيت المكتبات (pip install)
+# 1. تثبيت المكتبات
 @bot.message_handler(commands=['install'])
 def install_lib(message):
     if message.chat.id == ADMIN_ID:
@@ -44,32 +50,37 @@ def install_lib(message):
             bot.reply_to(message, f"✅ النتيجة:\n`{res.stdout[:1000]}`", parse_mode='Markdown')
         except: bot.reply_to(message, "⚠️ حدد اسم المكتبة.")
 
-# 2. ميزة السيطرة الشاملة (Terminal Access)
-# عبر هذا الأمر تقدر تتحكم في Cloudflare أو Hugging Face لو مثبت أدواتهم
+# 2. تنفيذ أوامر النظام
 @bot.message_handler(commands=['exec'])
 def execute_command(message):
     if message.chat.id == ADMIN_ID:
         try:
             cmd = message.text.split(maxsplit=1)[1]
-            bot.reply_to(message, f"💻 جاري تنفيذ الأمر: `{cmd}`", parse_mode='Markdown')
+            bot.reply_to(message, f"💻 جاري تنفيذ: `{cmd}`", parse_mode='Markdown')
             res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             output = res.stdout if res.stdout else res.stderr
             bot.reply_to(message, f"📤 النتيجة:\n`{output[:3000]}`", parse_mode='Markdown')
         except Exception as e:
-            bot.reply_to(message, f"❌ خطأ تنفيذ: {str(e)}")
+            bot.reply_to(message, f"❌ خطأ: {str(e)}")
 
-# 3. محرك الذكاء الاصطناعي للرد الشامل
+# 3. الرد الذكي (Gemini مع Groq كاحتياطي)
 @bot.message_handler(func=lambda message: True)
 def ai_logic(message):
     if message.chat.id == ADMIN_ID:
         try:
-            chat_completion = client_groq.chat.completions.create(
-                messages=[{"role": "user", "content": message.text}],
-                model="mixtral-8x7b-32768",
-            )
-            bot.reply_to(message, chat_completion.choices[0].message.content)
-        except Exception as e:
-            bot.reply_to(message, "🛠 السيرفر مشغول، جرب لاحقاً.")
+            # نحاول نرد باستخدام Gemini
+            response = gemini_model.generate_content(message.text)
+            bot.reply_to(message, response.text)
+        except:
+            try:
+                # إذا فشل Gemini، نستخدم Groq
+                chat_completion = client_groq.chat.completions.create(
+                    messages=[{"role": "user", "content": message.text}],
+                    model="mixtral-8x7b-32768",
+                )
+                bot.reply_to(message, chat_completion.choices[0].message.content)
+            except:
+                bot.reply_to(message, "🛠 السيرفرات مشغولة، حاول لاحقاً.")
 
 print("🔥 لوحة تحكم الريمي قيد التشغيل...")
 bot.polling()
