@@ -1,4 +1,6 @@
-pyTelegramBotAPI
+python-telegram-bot
+requests
 supabase
-google-generativeai
 groq
+fastapi
+uvicorn
