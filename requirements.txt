@@ -4,3 +4,4 @@ supabase
 groq
 fastapi
 uvicorn
+google-generativeai
