@@ -9,7 +9,7 @@ from groq import Groq
 import google.generativeai as genai
 import time
 
-# --- سحب المفاتيح من Render ---
+# --- سحب المفاتيح من Render (تأكد أن الأسماء في ريندر تطابق هذه تماماً) ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -24,38 +24,39 @@ client_groq = Groq(api_key=GROQ_KEY)
 genai.configure(api_key=GEMINI_KEY)
 gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
-# الأي دي الخاص بك (تأكد منه لاحقاً)
 ADMIN_ID = "1071477484" 
 
-# --- واجهة FastAPI ---
+# --- واجهة FastAPI (عشان ريندر ما يطفي البوت) ---
 app = FastAPI()
 
 @app.get("/")
 def home():
-    return {"status": "Cinema For Yemen is Online!"}
+    return {"status": "Cinema For Plus is Online!"}
 
 # --- أوامر تيليجرام ---
 
 @bot.message_handler(commands=["start"])
 def welcome(message):
-    # سيرد على الجميع الآن للتأكد من التشغيل
-    bot.reply_to(message, f"🚀 يا هلا! البوت شغال يا وحش.\nرقم الأي دي حقك هو: {message.chat.id}")
+    bot.reply_to(message, f"🚀 يا هلا يا محمد! البوت شغال.\nرقم الأي دي حقك هو: {message.chat.id}")
 
 @bot.message_handler(func=lambda message: True)
 def ai_logic(message):
-    # سيقوم بالرد بالذكاء الاصطناعي على أي مستخدم حالياً للتجربة
     try:
+        # المحاولة الأولى باستخدام Gemini
         response = gemini_model.generate_content(message.text)
         bot.reply_to(message, response.text)
-    except:
+    except Exception as e:
+        print(f"Gemini Error: {e}")
         try:
+            # المحاولة الثانية باستخدام Groq في حال فشل Gemini
             chat = client_groq.chat.completions.create(
                 messages=[{"role": "user", "content": message.text}],
                 model="mixtral-8x7b-32768",
             )
             bot.reply_to(message, chat.choices[0].message.content)
-        except:
-            bot.reply_to(message, "⚙️ السيرفرات مشغولة، جرب لاحقاً.")
+        except Exception as e2:
+            print(f"Groq Error: {e2}")
+            bot.reply_to(message, "⚙️ السيرفرات مشغولة، تأكد من مفاتيح الـ API في ريندر.")
 
 # --- دالة تشغيل البوت ---
 def run_bot():
@@ -69,10 +70,10 @@ def run_bot():
             time.sleep(5)
 
 if __name__ == "__main__":
-    # تشغيل البوت في Thread منفصل
+    # تشغيل البوت في الخلفية
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # تشغيل السيرفر الرئيسي
+    # تشغيل السيرفر لاستقبال طلبات ريندر
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
